@@ -2,7 +2,7 @@
 
 A web-based, zero-knowledge password manager built for the ICS0027 Web
 Application Security course. The server and database only ever see
-ciphertext and password verifiers — the master password and decrypted
+ciphertext and password verifiers. The master password and decrypted
 vault exist only in the user's browser.
 
 Design rationale, the threat model and the architecture diagram live in

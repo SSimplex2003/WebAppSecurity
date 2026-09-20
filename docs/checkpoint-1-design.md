@@ -1,4 +1,4 @@
-# Checkpoint 1 — Threat Model & Architecture
+# Checkpoint 1: Threat Model & Architecture
 
 Project: **Web-Based Secure Password Manager**
 Course: ICS0027 Web Application Security, Week 4
@@ -8,7 +8,7 @@ Course: ICS0027 Web Application Security, Week 4
 A web application that lets a user store, retrieve and organize login
 credentials ("vault items") behind a single master password. The core
 security property is **zero-knowledge**: the server and its database only
-ever hold ciphertext, salts and password verifiers — the plaintext master
+ever hold ciphertext, salts and password verifiers. The plaintext master
 password and the decrypted vault never leave the browser.
 
 In scope for the semester project:
@@ -58,12 +58,12 @@ boundary.
 
 **Trust boundaries:**
 
-1. **User device ↔ network** — the browser is trusted with plaintext; the
+1. **User device to network:** the browser is trusted with plaintext; the
    network is not (hence TLS everywhere, no exceptions).
-2. **Network ↔ application server** — the server is trusted to route,
+2. **Network to application server:** the server is trusted to route,
    authenticate and authorize requests, but is *not* trusted with plaintext
    vault data or the master password.
-3. **Application server ↔ data tier** — the database is trusted even less
+3. **Application server to data tier:** the database is trusted even less
    than the app server: it must remain safe to leak (ciphertext only) and is
    reached only through parameterized queries, never raw SQL built from
    request input.
@@ -71,7 +71,7 @@ boundary.
 ## 3. Threat Model
 
 Mapped to the **OWASP Top 10 (2025)** and to the attack classes covered in
-Weeks 1–4 (HTTP/cookies, client-side controls & HTML injection, XSS).
+Weeks 1-4 (HTTP/cookies, client-side controls & HTML injection, XSS).
 
 | # | Threat / scenario | Category | Mitigation |
 |---|---|---|---|
@@ -114,7 +114,7 @@ application route is ever served over plain HTTP outside of local dev.
 - **Fixation prevention:** the session ID is regenerated
   (`req.session.regenerate`) immediately after a successful login, and any
   pre-authentication session is discarded rather than "upgraded" in place.
-- **CSRF:** synchronizer token pattern — a per-session token is required on
+- **CSRF:** synchronizer token pattern. A per-session token is required on
   every non-GET request and validated server-side before the request is
   processed.
 - **Brute-force protection:** rate limiting and progressive lockout on
@@ -122,7 +122,7 @@ application route is ever served over plain HTTP outside of local dev.
   throttling (see threat #8).
 - **Multi-factor authentication (stretch goal):** TOTP (RFC 6238) as a second
   factor, required at login and again before the wrapped Vault Key is
-  released to the client — planned after the Checkpoint 2 core flow is
+  released to the client. Planned after the Checkpoint 2 core flow is
   working.
 
 ## 6. Cryptographic Design
@@ -136,7 +136,7 @@ exposing any user's master password or vault contents.
    `MasterKey = Argon2id(masterPassword, salt, params)` locally. The master
    password and Master Key never leave the browser.
 3. **Login verifier.** The browser derives a second value,
-   `AuthHash = HKDF(MasterKey, "auth")`, and sends *that* to the server —
+   `AuthHash = HKDF(MasterKey, "auth")`, and sends *that* to the server,
    never the Master Key or the password itself. The server hashes it again
    with Argon2id before storing it, so the stored verifier cannot be used
    directly even if leaked, and cannot be reversed into the Master Key.
@@ -160,6 +160,6 @@ Key in plaintext, or any decrypted vault content.
 
 See the top-level [README](../README.md) for scope, planned routes and how
 to run the current scaffold locally. This checkpoint intentionally ships
-only a minimal backend health check and a placeholder frontend page — the
+only a minimal backend health check and a placeholder frontend page. The
 registration/login flow, client-side crypto and vault CRUD are Checkpoint 2
 work.
