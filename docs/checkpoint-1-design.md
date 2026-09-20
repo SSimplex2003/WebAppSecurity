@@ -3,6 +3,11 @@
 Project: **Web-Based Secure Password Manager**
 Course: ICS0027 Web Application Security, Week 4
 
+**Contents:** [Scope](#1-scope) · [Architecture](#2-system-architecture) ·
+[Threat Model](#3-threat-model) · [Tech Stack](#4-technology-stack) ·
+[Auth & Sessions](#5-authentication--session-model) ·
+[Crypto Design](#6-cryptographic-design) · [Repository](#7-repository)
+
 ## 1. Scope
 
 A web application that lets a user store, retrieve and organize login
@@ -39,29 +44,38 @@ as the session does.
 
 ## 2. System Architecture
 
-```mermaid
-flowchart TB
-    subgraph UserDevice["Trust boundary: user's device"]
-        B["Browser (static HTML/JS)\n- sends master password once, at login/register\n- otherwise sends/receives plaintext vault\n  fields over TLS for display and editing"]
-    end
-
-    subgraph Network["Trust boundary: network"]
-        TLS["TLS 1.2+ (HTTPS)\nCaddy / nginx reverse proxy"]
-    end
-
-    subgraph Server["Trust boundary: application server"]
-        APP["FastAPI (Python)\n- helmet-equivalent security headers\n- session + CSRF middleware\n- derives the encryption key (Argon2id)\n- encrypts/decrypts vault items (AES-256-GCM)"]
-        SESS[("Redis\nsession data incl. the in-memory\nencryption key, never written to disk")]
-    end
-
-    subgraph DataTier["Trust boundary: data tier"]
-        DB[("PostgreSQL\n- users (email, Argon2id password hash, KDF salt)\n- vault_items (ciphertext + nonce + tag only)")]
-    end
-
-    B <-- "1. master password only at login; ciphertext\nnever leaves the DB, plaintext vault fields\nflow over TLS for display/editing" --> TLS
-    TLS <--> APP
-    APP <-- "2. session id (cookie) maps to key" --> SESS
-    APP <-- "3. parameterized queries (SQLAlchemy)" --> DB
+```
+ BROWSER                                    [ trust boundary: user's device ]
+   - types the master password, sends it once, at login/register
+   - otherwise sends/receives plaintext vault fields for display & editing
+     |
+     |  every request/response, over TLS
+     v
+ =====================================================================
+ TLS 1.2+ (HTTPS), terminated by a Caddy / nginx reverse proxy
+                                                [ trust boundary: network ]
+ =====================================================================
+     |
+     v
+ APPLICATION SERVER                [ trust boundary: application server ]
+   FastAPI (Python)
+     - security headers, session + CSRF checks on every request
+     - derives the encryption key (Argon2id) once, at login
+     - encrypts / decrypts vault items (AES-256-GCM) on every vault call
+     |
+     |-- session id (HttpOnly cookie) ------> REDIS
+     |                                         session record holds the
+     |                                         encryption key, in memory
+     |                                         only, never written to disk
+     |
+     `-- parameterized queries (SQLAlchemy) -> POSTGRESQL
+                                        [ trust boundary: data tier,
+                                          least trusted, ciphertext only ]
+                                          users:       email,
+                                                       Argon2id password hash,
+                                                       KDF salt
+                                          vault_items: ciphertext + nonce
+                                                       + authTag only
 ```
 
 **Where credentials are encrypted:** the master password itself is never
@@ -91,32 +105,141 @@ application logs.
 Mapped to the **OWASP Top 10 (2025)** and to the attack classes covered in
 Weeks 1-4 (HTTP/cookies, client-side controls & HTML injection, XSS).
 
-| # | Threat / scenario | Category | Mitigation |
-|---|---|---|---|
-| 1 | Attacker changes a vault item ID in the URL/body and reads or edits another user's credentials (IDOR). | A01:2025 Broken Access Control | Every vault query is scoped server-side by the session's user ID, never by a client-supplied user/owner field; deny-by-default authorization dependency on all `/api/vault/*` routes. |
-| 2 | Verbose error pages, default DB credentials, or an exposed debug endpoint leak internals. | A02:2025 Security Misconfiguration | Security headers on every response, generic error responses in production (FastAPI's debug/docs pages disabled outside dev), no default accounts, secrets only via environment variables (never committed), least-privilege DB role. |
-| 3 | A compromised PyPI dependency (e.g. a crypto or logging package) exfiltrates master passwords or derived keys from memory. | A03:2025 Software Supply Chain Failures | Lockfile committed (`pip freeze` / `requirements.txt` pinned), `pip-audit`/Dependabot in CI, minimal dependency surface for anything touching secrets, pin and review versions before upgrading. |
-| 4 | Server or DB breach exposes vault contents; weak KDF lets a stolen password hash be brute-forced offline. | A04:2025 Cryptographic Failures | Argon2id for both the login verifier and the encryption-key derivation, tuned to OWASP-recommended cost parameters; AES-256-GCM with a unique nonce per item; TLS 1.2+ in transit; DB alone (without a live session) yields only ciphertext and salts. |
-| 5 | `' OR '1'='1` style payload in the login or search field against the database. | A05:2025 Injection | All DB access through SQLAlchemy parameterized queries/ORM, never string-concatenated SQL; Pydantic request-schema validation (allow-list) on every endpoint. |
-| 6 | Attacker stores a `<form>`/`<meta>` tag in a vault item's title or notes field that renders as a fake login prompt to phish the master password (HTML injection / content spoofing, Week 3). | Week 3: HTML Injection & Content Spoofing | Vault content is always inserted via `textContent`/safe DOM APIs on the frontend, never raw HTML interpolation; strict Content-Security-Policy (no inline scripts/forms) as defense in depth. |
-| 7 | Stored XSS payload in a vault field runs JavaScript that reads other decrypted vault fields on the page or exfiltrates the session cookie. | Week 4 / A05: Cross-Site Scripting | Output encoding on every render path; CSP with no `unsafe-inline`; session cookie marked `HttpOnly` so it is unreadable even if a script executes; input length/type validation server-side. |
-| 8 | Attacker disables a client-side password-strength check or rate-limit via devtools/Burp and submits a weak master password or brute-forces `/login` directly against the API (client-side control bypass, Week 3). | Week 3: Bypassing Client-Side Controls | Every client-side check is duplicated server-side (password policy, field limits) with Pydantic validators; server never trusts a client-reported security decision (e.g. "already validated"). |
-| 9 | Attacker edits a hidden field or JSON body parameter (`user_id`, `vault_id`, `role`) in transit to act on another user's data (input tampering, client-server communication). | Client-Server Communication: Input Tampering | Server identity comes only from the authenticated session, never from client-supplied identifiers; Pydantic schemas reject unexpected/extra fields. |
-| 10 | Credential stuffing or brute force against `/login`; session fixation by pre-setting a victim's session ID. | A07:2025 Authentication Failures | Argon2id-hashed login verifier, rate limiting + progressive lockout on auth endpoints, session ID regenerated on every successful login (§5), optional TOTP MFA. |
-| 11 | A malicious page auto-submits a request (e.g. "delete vault item", "change master password") using the victim's live session (CSRF). | A01/CSRF (Week 10 preview, relevant from the first auth flow) | `SameSite=Strict` session cookie, synchronizer CSRF token required on all state-changing requests, re-authentication required for changing the master password or exporting the vault. |
-| 12 | Server compromise (e.g. RCE, memory dump) while a user's session is active exposes that session's in-memory encryption key, letting the attacker decrypt that one user's vault until the session expires. | A04/A06:2025 (accepted tradeoff of a server-side model, §1) | Short session TTL, key exists only in Redis and only for the session's lifetime, never written to disk or logs; Redis restricted to the application network, not internet-facing; monitored/alerted (see #13 below) for anomalous decrypt volume. |
-| 13 | Mass export or repeated failed logins go unnoticed because nothing is logged. | A09:2025 Security Logging & Alerting Failures | Structured audit log of auth events and vault access (metadata only, never secrets or key material), alerting thresholds on failed logins / bulk export. |
+**T1: Broken Access Control** (OWASP A01:2025)
+Scenario: attacker changes a vault item ID in the URL/body and reads or
+edits another user's credentials (IDOR).
+Mitigation: every vault query is scoped server-side by the session's user
+ID, never by a client-supplied user/owner field; deny-by-default
+authorization dependency on all `/api/vault/*` routes.
+
+**T2: Security Misconfiguration** (OWASP A02:2025)
+Scenario: verbose error pages, default DB credentials, or an exposed debug
+endpoint leak internals.
+Mitigation: security headers on every response, generic error responses in
+production (FastAPI's debug/docs pages disabled outside dev), no default
+accounts, secrets only via environment variables (never committed),
+least-privilege DB role.
+
+**T3: Software Supply Chain Failures** (OWASP A03:2025)
+Scenario: a compromised PyPI dependency (e.g. a crypto or logging package)
+exfiltrates master passwords or derived keys from memory.
+Mitigation: lockfile committed (pinned `requirements.txt`), `pip-audit`/
+Dependabot in CI, minimal dependency surface for anything touching secrets,
+pin and review versions before upgrading.
+
+**T4: Cryptographic Failures** (OWASP A04:2025)
+Scenario: server or DB breach exposes vault contents; a weak KDF lets a
+stolen password hash be brute-forced offline.
+Mitigation: Argon2id for both the login verifier and the encryption-key
+derivation, tuned to OWASP-recommended cost parameters; AES-256-GCM with a
+unique nonce per item; TLS 1.2+ in transit; the DB alone (without a live
+session) yields only ciphertext and salts.
+
+**T5: Injection** (OWASP A05:2025)
+Scenario: `' OR '1'='1` style payload in the login or search field against
+the database.
+Mitigation: all DB access through SQLAlchemy parameterized queries/ORM,
+never string-concatenated SQL; Pydantic request-schema validation
+(allow-list) on every endpoint.
+
+**T6: HTML Injection & Content Spoofing** (Week 3)
+Scenario: attacker stores a `<form>`/`<meta>` tag in a vault item's title
+or notes field that renders as a fake login prompt to phish the master
+password.
+Mitigation: vault content is always inserted via `textContent`/safe DOM
+APIs on the frontend, never raw HTML interpolation; strict
+Content-Security-Policy (no inline scripts/forms) as defense in depth.
+
+**T7: Cross-Site Scripting** (Week 4 / OWASP A05:2025)
+Scenario: a stored XSS payload in a vault field runs JavaScript that reads
+other decrypted vault fields on the page or exfiltrates the session cookie.
+Mitigation: output encoding on every render path; CSP with no
+`unsafe-inline`; session cookie marked `HttpOnly` so it is unreadable even
+if a script executes; input length/type validation server-side.
+
+**T8: Bypassing Client-Side Controls** (Week 3)
+Scenario: attacker disables a client-side password-strength check or
+rate-limit via devtools/Burp and submits a weak master password, or
+brute-forces `/login` directly against the API.
+Mitigation: every client-side check is duplicated server-side (password
+policy, field limits) with Pydantic validators; the server never trusts a
+client-reported security decision (e.g. "already validated").
+
+**T9: Input Tampering** (Client-Server Communication, Week 2)
+Scenario: attacker edits a hidden field or JSON body parameter (`user_id`,
+`vault_id`, `role`) in transit to act on another user's data.
+Mitigation: server identity comes only from the authenticated session,
+never from client-supplied identifiers; Pydantic schemas reject unexpected/
+extra fields.
+
+**T10: Authentication Failures** (OWASP A07:2025)
+Scenario: credential stuffing or brute force against `/login`; session
+fixation by pre-setting a victim's session ID.
+Mitigation: Argon2id-hashed login verifier, rate limiting + progressive
+lockout on auth endpoints, session ID regenerated on every successful login
+(§5), optional TOTP MFA.
+
+**T11: Cross-Site Request Forgery** (Week 10 preview, relevant from the
+first auth flow)
+Scenario: a malicious page auto-submits a request (e.g. "delete vault
+item", "change master password") using the victim's live session.
+Mitigation: `SameSite=Strict` session cookie, synchronizer CSRF token
+required on all state-changing requests, re-authentication required for
+changing the master password or exporting the vault.
+
+**T12: Active-session server compromise** (accepted tradeoff of a
+server-side encryption model, §1)
+Scenario: server compromise (e.g. RCE, memory dump) while a user's session
+is active exposes that session's in-memory encryption key, letting the
+attacker decrypt that one user's vault until the session expires.
+Mitigation: short session TTL, key exists only in Redis and only for the
+session's lifetime, never written to disk or logs; Redis restricted to the
+application network, not internet-facing; monitored/alerted for anomalous
+decrypt volume (see T13).
+
+**T13: Security Logging & Alerting Failures** (OWASP A09:2025)
+Scenario: mass export or repeated failed logins go unnoticed because
+nothing is logged.
+Mitigation: structured audit log of auth events and vault access (metadata
+only, never secrets or key material), alerting thresholds on failed logins
+/ bulk export.
 
 ## 4. Technology Stack
 
-| Layer | Choice | Justification |
-|---|---|---|
-| Backend framework | Python 3.14 / FastAPI | Pydantic gives request-schema validation for free (mitigates A05 Injection and input tampering at the boundary), async I/O suits an API of small JSON/ciphertext payloads, auto-generated OpenAPI docs are useful for demoing the design, and it is the language the team can read and explain most confidently. |
-| Frontend | Static HTML/CSS/vanilla JS calling the API with `fetch` | No build step or framework auth quirks to reason about; keeps the request/response flow (and therefore the trust boundary) easy to trace end to end during the presentation. |
-| Database | PostgreSQL + SQLAlchemy ORM | Parameterized queries by default (mitigates A05 Injection), relational integrity between users and vault items, straightforward migrations, first-class Docker support for local dev. |
-| Server-side crypto | `argon2-cffi` (Argon2id, for both the login verifier and the raw key derivation) + `cryptography` (pyca, for AES-256-GCM) | Both are the standard, audited Python libraries for these primitives; Argon2id is OWASP's current recommendation for password-based key derivation (memory-hard, resists GPU/ASIC cracking) over faster hashes like plain PBKDF2/bcrypt. |
-| Session store | Redis, session data keyed by an opaque random session ID | The derived encryption key must live somewhere server-side for the session's duration; Redis keeps it in memory only (never on disk), and sessions can be revoked instantly (logout-everywhere, admin action), unlike a self-contained signed cookie. |
-| Reverse proxy / TLS | Caddy (or nginx) terminating TLS in front of the FastAPI app | Automatic certificate management (Let's Encrypt) in production; local development uses a self-signed cert via `mkcert` so HTTPS-only behaviors (secure cookies, HSTS) can be tested locally instead of assumed. |
+**Backend framework: Python 3.14 / FastAPI**
+Pydantic gives request-schema validation for free (mitigates A05 Injection
+and input tampering at the boundary), async I/O suits an API of small
+JSON/ciphertext payloads, auto-generated OpenAPI docs are useful for
+demoing the design, and it is the language the team can read and explain
+most confidently.
+
+**Frontend: static HTML/CSS/vanilla JS calling the API with `fetch`**
+No build step or framework auth quirks to reason about; keeps the
+request/response flow (and therefore the trust boundary) easy to trace end
+to end during the presentation.
+
+**Database: PostgreSQL + SQLAlchemy ORM**
+Parameterized queries by default (mitigates A05 Injection), relational
+integrity between users and vault items, straightforward migrations,
+first-class Docker support for local dev.
+
+**Server-side crypto: `argon2-cffi` + `cryptography` (pyca)**
+Argon2id (via `argon2-cffi`) handles both the login verifier and the raw
+key derivation; `cryptography` handles AES-256-GCM. Both are the standard,
+audited Python libraries for these primitives. Argon2id is OWASP's current
+recommendation for password-based key derivation (memory-hard, resists
+GPU/ASIC cracking) over faster hashes like plain PBKDF2/bcrypt.
+
+**Session store: Redis, keyed by an opaque random session ID**
+The derived encryption key must live somewhere server-side for the
+session's duration; Redis keeps it in memory only (never on disk), and
+sessions can be revoked instantly (logout-everywhere, admin action),
+unlike a self-contained signed cookie.
+
+**Reverse proxy / TLS: Caddy (or nginx) in front of FastAPI**
+Automatic certificate management (Let's Encrypt) in production; local
+development uses a self-signed cert via `mkcert` so HTTPS-only behaviors
+(secure cookies, HSTS) can be tested locally instead of assumed.
 
 **TLS plan:** TLS 1.2+ only, HTTP requests redirected to HTTPS, `HSTS`
 enabled once the certificate chain is verified in each environment. No
@@ -141,7 +264,7 @@ request.
   processed.
 - **Brute-force protection:** rate limiting and progressive lockout on
   `/api/auth/login` and `/api/auth/register`, independent of any client-side
-  throttling (see threat #8).
+  throttling (see T8).
 - **Multi-factor authentication (stretch goal):** TOTP (RFC 6238) as a
   second factor, required at login before the encryption key is derived and
   the session is issued. Planned after the Checkpoint 2 core flow is
@@ -150,7 +273,7 @@ request.
 ## 6. Cryptographic Design
 
 Goal: minimize what a database-only breach exposes, and be explicit about
-what an active-session/server compromise can additionally expose (§3, #12).
+what an active-session/server compromise can additionally expose (§3, T12).
 
 1. **Registration.** The client submits `{email, master_password}` over
    TLS. The server generates a random per-user KDF salt and computes
@@ -192,6 +315,6 @@ encryption key, or any decrypted vault content.
 
 See the top-level [README](../README.md) for scope, planned routes and how
 to run the current scaffold locally. This checkpoint intentionally ships
-only a minimal backend health check and a placeholder frontend page. The
-registration/login flow, server-side crypto and vault CRUD are Checkpoint 2
+only a minimal backend health check. The registration/login flow,
+server-side crypto, vault CRUD and the frontend itself are Checkpoint 2
 work.

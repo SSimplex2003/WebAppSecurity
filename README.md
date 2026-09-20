@@ -47,8 +47,8 @@ via a reverse proxy in production. Full justification in the design doc.
 
 ## Running locally
 
-Currently only the API health check and a placeholder frontend page are
-implemented; the rest lands in Checkpoint 2. Requires Python 3.14
+Currently only the API health check is implemented; the rest, including
+the frontend, lands in Checkpoint 2. Requires Python 3.14
 (pinned in `.python-version`). The virtual environment lives at the
 repository root (`.venv`), not inside `backend/`, so PyCharm and the
 commands below agree on a single interpreter.
@@ -75,8 +75,6 @@ commands below agree on a single interpreter.
    ```
    The health check is then available at `http://localhost:8000/health`,
    and interactive API docs at `http://localhost:8000/docs`.
-4. Open `frontend/index.html` directly in a browser to view the
-   placeholder page.
 
 In PyCharm: **Settings → Project: WebAppSecurity → Python Interpreter →
 Add Interpreter → Existing → `.venv\Scripts\python.exe`** (repository
