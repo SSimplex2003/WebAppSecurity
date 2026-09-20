@@ -48,12 +48,14 @@ via a reverse proxy in production. Full justification in the design doc.
 ## Running locally
 
 Currently only the API health check and a placeholder frontend page are
-implemented; the rest lands in Checkpoint 2. Requires Python 3.12+.
+implemented; the rest lands in Checkpoint 2. Requires Python 3.14
+(pinned in `.python-version`). The virtual environment lives at the
+repository root (`.venv`), not inside `backend/`, so PyCharm and the
+commands below agree on a single interpreter.
 
-1. Create a virtual environment and install backend dependencies (from
-   the `backend/` folder):
+1. From the repository root, create the virtual environment and install
+   backend dependencies:
    ```bash
-   cd backend
    python -m venv .venv
    ```
    Activate it:
@@ -62,19 +64,24 @@ implemented; the rest lands in Checkpoint 2. Requires Python 3.12+.
 
    Then install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install -r backend/requirements.txt
    ```
-2. Copy `.env.example` to `.env`:
-   - macOS/Linux/Git Bash: `cp .env.example .env`
-   - Windows PowerShell: `Copy-Item .env.example .env`
-3. Run the API in dev mode:
+2. Copy `backend/.env.example` to `backend/.env`:
+   - macOS/Linux/Git Bash: `cp backend/.env.example backend/.env`
+   - Windows PowerShell: `Copy-Item backend\.env.example backend\.env`
+3. Run the API in dev mode, still from the repository root:
    ```bash
-   uvicorn app.main:app --reload --port 8000
+   uvicorn app.main:app --reload --port 8000 --app-dir backend
    ```
    The health check is then available at `http://localhost:8000/health`,
    and interactive API docs at `http://localhost:8000/docs`.
 4. Open `frontend/index.html` directly in a browser to view the
    placeholder page.
+
+In PyCharm: **Settings → Project: WebAppSecurity → Python Interpreter →
+Add Interpreter → Existing → `.venv\Scripts\python.exe`** (repository
+root). That replaces whatever interpreter is currently selected with
+this one venv.
 
 The `DATABASE_URL`/`REDIS_URL` values in `.env` are not used yet, the
 health check has no dependency on Postgres or Redis. Once Checkpoint 2

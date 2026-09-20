@@ -111,7 +111,7 @@ Weeks 1-4 (HTTP/cookies, client-side controls & HTML injection, XSS).
 
 | Layer | Choice | Justification |
 |---|---|---|
-| Backend framework | Python 3.12+ / FastAPI | Pydantic gives request-schema validation for free (mitigates A05 Injection and input tampering at the boundary), async I/O suits an API of small JSON/ciphertext payloads, auto-generated OpenAPI docs are useful for demoing the design, and it is the language the team can read and explain most confidently. |
+| Backend framework | Python 3.14 / FastAPI | Pydantic gives request-schema validation for free (mitigates A05 Injection and input tampering at the boundary), async I/O suits an API of small JSON/ciphertext payloads, auto-generated OpenAPI docs are useful for demoing the design, and it is the language the team can read and explain most confidently. |
 | Frontend | Static HTML/CSS/vanilla JS calling the API with `fetch` | No build step or framework auth quirks to reason about; keeps the request/response flow (and therefore the trust boundary) easy to trace end to end during the presentation. |
 | Database | PostgreSQL + SQLAlchemy ORM | Parameterized queries by default (mitigates A05 Injection), relational integrity between users and vault items, straightforward migrations, first-class Docker support for local dev. |
 | Server-side crypto | `argon2-cffi` (Argon2id, for both the login verifier and the raw key derivation) + `cryptography` (pyca, for AES-256-GCM) | Both are the standard, audited Python libraries for these primitives; Argon2id is OWASP's current recommendation for password-based key derivation (memory-hard, resists GPU/ASIC cracking) over faster hashes like plain PBKDF2/bcrypt. |
