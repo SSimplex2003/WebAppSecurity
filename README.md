@@ -46,25 +46,33 @@ justification in the design doc.
 ## Running locally
 
 Currently only the API health check and a placeholder frontend page are
-implemented; the rest lands in Checkpoint 2.
+implemented; the rest lands in Checkpoint 2. Requires Node.js 18+ and npm.
 
-1. Start local infrastructure (PostgreSQL + Redis):
-   ```bash
-   docker compose up -d
-   ```
-2. Install backend dependencies and configure environment:
+1. Install backend dependencies and configure environment (from the
+   `backend/` folder):
    ```bash
    cd backend
    npm install
-   cp .env.example .env
    ```
-3. Run the API in dev mode:
+   Then copy `.env.example` to `.env`:
+   - macOS/Linux/Git Bash: `cp .env.example .env`
+   - Windows PowerShell: `Copy-Item .env.example .env`
+2. Run the API in dev mode:
    ```bash
    npm run dev
    ```
    The health check is then available at `http://localhost:3000/health`.
-4. Open `frontend/index.html` directly in a browser to view the
+3. Open `frontend/index.html` directly in a browser to view the
    placeholder page.
+
+The `DATABASE_URL`/`REDIS_URL` values in `.env` are not used yet, the
+health check has no dependency on Postgres or Redis. Once Checkpoint 2
+wires up the database and sessions, start that local infrastructure first
+with:
+```bash
+docker compose up -d
+```
+(requires Docker Desktop; needed only from that point on).
 
 ## Repository
 
