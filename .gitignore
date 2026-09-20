@@ -5,3 +5,8 @@ build/
 *.log
 .DS_Store
 coverage/
+
+# Python
+.venv/
+__pycache__/
+*.pyc

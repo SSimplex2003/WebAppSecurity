@@ -1,19 +1,22 @@
 # Secure Password Manager
 
-A web-based, zero-knowledge password manager built for the ICS0027 Web
-Application Security course. The server and database only ever see
-ciphertext and password verifiers. The master password and decrypted
-vault exist only in the user's browser.
+A web-based password manager built for the ICS0027 Web Application
+Security course. The master password is sent once, over TLS, at login;
+the server derives an encryption key from it and uses that key to
+encrypt and decrypt vault items server-side for the duration of the
+session. The key is never written to disk, only PostgreSQL ciphertext
+and password hashes are persisted.
 
 Design rationale, the threat model and the architecture diagram live in
-[docs/checkpoint-1-design.md](docs/checkpoint-1-design.md).
+[docs/checkpoint-1-design.md](docs/checkpoint-1-design.md), including the
+tradeoffs of this server-side encryption model versus a zero-knowledge one.
 
 ## Scope
 
 - Registration and login behind a single master password, with
   server-side sessions (not JWT) so access can be revoked instantly.
-- Client-side key derivation (Argon2id) and encryption/decryption
-  (AES-256-GCM via the Web Crypto API) of every vault item.
+- Server-side key derivation (Argon2id) and encryption/decryption
+  (AES-256-GCM) of every vault item.
 - CRUD for vault items: title, username, password, URL, notes.
 - Defense against the attack classes covered so far: HTML/content
   injection, XSS, input tampering and client-side control bypass, CSRF.
@@ -27,42 +30,50 @@ extension/autofill, breach-monitoring integrations.
 | Method | Route | Purpose | Status |
 |---|---|---|---|
 | GET | `/health` | Liveness check | Implemented |
-| POST | `/api/auth/register` | Create account, store KDF salt + verifier + wrapped Vault Key | Checkpoint 2 |
-| POST | `/api/auth/login` | Verify login hash, start session | Checkpoint 2 |
-| POST | `/api/auth/logout` | Destroy session | Checkpoint 2 |
+| POST | `/api/auth/register` | Create account, store Argon2id password hash + KDF salt | Checkpoint 2 |
+| POST | `/api/auth/login` | Verify password, derive the encryption key, start session | Checkpoint 2 |
+| POST | `/api/auth/logout` | Destroy session (and the in-memory encryption key with it) | Checkpoint 2 |
 | POST | `/api/auth/mfa/verify` | TOTP second factor | Stretch goal |
-| GET | `/api/vault/key` | Fetch the caller's wrapped Vault Key | Checkpoint 2 |
-| GET | `/api/vault/items` | List the caller's encrypted vault items | Checkpoint 2 |
-| POST | `/api/vault/items` | Create an encrypted vault item | Checkpoint 2 |
-| PUT | `/api/vault/items/:id` | Update an encrypted vault item | Checkpoint 2 |
+| GET | `/api/vault/items` | List and decrypt the caller's vault items | Checkpoint 2 |
+| POST | `/api/vault/items` | Encrypt and create a vault item | Checkpoint 2 |
+| PUT | `/api/vault/items/:id` | Encrypt and update a vault item | Checkpoint 2 |
 | DELETE | `/api/vault/items/:id` | Delete a vault item | Checkpoint 2 |
 
 ## Tech stack
 
-Node.js/Express (TypeScript) API, PostgreSQL via Prisma, Redis-backed
-sessions, TLS termination via a reverse proxy in production. Full
-justification in the design doc.
+Python/FastAPI API, PostgreSQL via SQLAlchemy, Redis-backed sessions
+(holding the per-session encryption key in memory only), TLS termination
+via a reverse proxy in production. Full justification in the design doc.
 
 ## Running locally
 
 Currently only the API health check and a placeholder frontend page are
-implemented; the rest lands in Checkpoint 2. Requires Node.js 18+ and npm.
+implemented; the rest lands in Checkpoint 2. Requires Python 3.12+.
 
-1. Install backend dependencies and configure environment (from the
-   `backend/` folder):
+1. Create a virtual environment and install backend dependencies (from
+   the `backend/` folder):
    ```bash
    cd backend
-   npm install
+   python -m venv .venv
    ```
-   Then copy `.env.example` to `.env`:
+   Activate it:
+   - macOS/Linux/Git Bash: `source .venv/bin/activate` (or `source .venv/Scripts/activate` on Git Bash for Windows)
+   - Windows PowerShell: `.venv\Scripts\Activate.ps1`
+
+   Then install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Copy `.env.example` to `.env`:
    - macOS/Linux/Git Bash: `cp .env.example .env`
    - Windows PowerShell: `Copy-Item .env.example .env`
-2. Run the API in dev mode:
+3. Run the API in dev mode:
    ```bash
-   npm run dev
+   uvicorn app.main:app --reload --port 8000
    ```
-   The health check is then available at `http://localhost:3000/health`.
-3. Open `frontend/index.html` directly in a browser to view the
+   The health check is then available at `http://localhost:8000/health`,
+   and interactive API docs at `http://localhost:8000/docs`.
+4. Open `frontend/index.html` directly in a browser to view the
    placeholder page.
 
 The `DATABASE_URL`/`REDIS_URL` values in `.env` are not used yet, the
