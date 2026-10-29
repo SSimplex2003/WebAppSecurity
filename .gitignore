@@ -10,3 +10,9 @@ coverage/
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Local dev artifacts: TLS certificate/key and the SQLite database
+certs/
+backend/data/
+*.db

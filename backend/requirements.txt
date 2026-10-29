@@ -1,8 +1,8 @@
-fastapi
-uvicorn[standard]
-python-dotenv
-argon2-cffi
-cryptography
-sqlalchemy
-psycopg2-binary
-redis
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+python-dotenv==1.2.3
+argon2-cffi==25.1.0
+cryptography==50.0.1
+sqlalchemy==2.0.54
+psycopg2-binary==2.9.13
+redis==8.1.0

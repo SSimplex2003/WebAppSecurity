@@ -116,8 +116,8 @@ authorization dependency on all `/api/vault/*` routes.
 Scenario: verbose error pages, default DB credentials, or an exposed debug
 endpoint leak internals.
 Mitigation: security headers on every response, generic error responses in
-production (FastAPI's debug/docs pages disabled outside dev), no default
-accounts, secrets only via environment variables (never committed),
+production (FastAPI's interactive docs and OpenAPI schema are disabled),
+no default accounts, secrets only via environment variables (never committed),
 least-privilege DB role.
 
 **T3: Software Supply Chain Failures** (OWASP A03:2025)
@@ -221,7 +221,9 @@ to end during the presentation.
 **Database: PostgreSQL + SQLAlchemy ORM**
 Parameterized queries by default (mitigates A05 Injection), relational
 integrity between users and vault items, straightforward migrations,
-first-class Docker support for local dev.
+first-class Docker support for local dev. Local runs default to a SQLite
+file so no database has to be installed; `DATABASE_URL` switches to
+PostgreSQL.
 
 **Server-side crypto: `argon2-cffi` + `cryptography` (pyca)**
 Argon2id (via `argon2-cffi`) handles both the login verifier and the raw
@@ -234,7 +236,9 @@ GPU/ASIC cracking) over faster hashes like plain PBKDF2/bcrypt.
 The derived encryption key must live somewhere server-side for the
 session's duration; Redis keeps it in memory only (never on disk), and
 sessions can be revoked instantly (logout-everywhere, admin action),
-unlike a self-contained signed cookie.
+unlike a self-contained signed cookie. Local runs default to an in-process
+store with the same behavior (the key still lives only in memory);
+`REDIS_URL` switches to Redis.
 
 **Reverse proxy / TLS: Caddy (or nginx) in front of FastAPI**
 Automatic certificate management (Let's Encrypt) in production; local
@@ -313,8 +317,7 @@ encryption key, or any decrypted vault content.
 
 ## 7. Repository
 
-See the top-level [README](../README.md) for scope, planned routes and how
-to run the current scaffold locally. This checkpoint intentionally ships
-only a minimal backend health check. The registration/login flow,
-server-side crypto, vault CRUD and the frontend itself are Checkpoint 2
-work.
+See the top-level [README](../README.md) for scope, routes and how to run
+the application locally. What was built for Checkpoint 2, and where it
+differs from this design, is described in
+[checkpoint-2-progress.md](checkpoint-2-progress.md).

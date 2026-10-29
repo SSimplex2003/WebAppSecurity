@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Secure Password Manager</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Secure Password Manager</h1>
+      <div id="session-info" class="session-info" hidden>
+        <span id="user-email"></span>
+        <button type="button" id="logout-btn" class="btn">Log out</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="auth-view" class="card narrow">
+        <div id="login-panel">
+          <h2>Log in</h2>
+          <form id="login-form">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" autocomplete="username" maxlength="254" required />
+
+            <label for="login-password">Master password</label>
+            <input
+              id="login-password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="128"
+              required
+            />
+
+            <button type="submit" class="btn primary">Log in</button>
+          </form>
+          <p class="muted">
+            No account yet?
+            <button type="button" id="show-register" class="link">Create one</button>
+          </p>
+        </div>
+
+        <div id="register-panel" hidden>
+          <h2>Create account</h2>
+          <form id="register-form">
+            <label for="register-email">Email</label>
+            <input
+              id="register-email"
+              type="email"
+              autocomplete="username"
+              maxlength="254"
+              required
+            />
+
+            <label for="register-password">Master password</label>
+            <input
+              id="register-password"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              maxlength="128"
+              required
+            />
+            <p class="hint">At least 12 characters. A long passphrase works best.</p>
+
+            <label for="register-confirm">Confirm master password</label>
+            <input
+              id="register-confirm"
+              type="password"
+              autocomplete="new-password"
+              minlength="12"
+              maxlength="128"
+              required
+            />
+
+            <p class="warning">
+              Your vault is encrypted with a key derived from this password. If you forget it,
+              your saved items cannot be recovered.
+            </p>
+
+            <button type="submit" class="btn primary">Create account</button>
+          </form>
+          <p class="muted">
+            Already registered?
+            <button type="button" id="show-login" class="link">Log in</button>
+          </p>
+        </div>
+
+        <p id="auth-error" class="error" role="alert" hidden></p>
+      </section>
+
+      <section id="vault-view" class="layout" hidden>
+        <section class="card">
+          <div class="list-head">
+            <h2>Your vault</h2>
+            <input id="search" type="search" placeholder="Search" aria-label="Search items" />
+          </div>
+          <p id="vault-error" class="error" role="alert" hidden></p>
+          <p id="empty-state" class="muted" hidden>Nothing here yet. Add your first item.</p>
+          <ul id="items" class="items"></ul>
+        </section>
+
+        <section class="card">
+          <h2 id="form-title">Add item</h2>
+          <form id="item-form">
+            <label for="item-title">Title</label>
+            <input id="item-title" type="text" maxlength="200" required />
+
+            <label for="item-username">Username</label>
+            <input id="item-username" type="text" maxlength="200" autocomplete="off" />
+
+            <label for="item-password">Password</label>
+            <div class="row">
+              <input
+                id="item-password"
+                type="password"
+                maxlength="1000"
+                autocomplete="new-password"
+              />
+              <button type="button" id="toggle-password" class="btn">Show</button>
+              <button type="button" id="generate-password" class="btn">Generate</button>
+            </div>
+
+            <label for="item-url">URL</label>
+            <input id="item-url" type="text" maxlength="2000" placeholder="https://" />
+
+            <label for="item-notes">Notes</label>
+            <textarea id="item-notes" rows="4" maxlength="5000"></textarea>
+
+            <div class="row">
+              <button type="submit" id="save-btn" class="btn primary">Save</button>
+              <button type="button" id="cancel-btn" class="btn" hidden>Cancel</button>
+            </div>
+          </form>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
